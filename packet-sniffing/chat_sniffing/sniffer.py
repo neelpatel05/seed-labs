@@ -12,7 +12,7 @@ def process_packet(packet):
 
 	if packet.haslayer(Raw):
 		data = packet[Raw]
-		print("Data: {}", data.load())
+		print("Data: {}".format(data.load))
 
 	print("------------------------------------------------------------------------------")
 
