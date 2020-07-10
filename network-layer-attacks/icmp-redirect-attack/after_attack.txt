@@ -1,0 +1,2 @@
+8.8.8.8 via 192.168.147.149 dev ens33  src 192.168.147.150 
+    cache <redirected>  expires 288sec
